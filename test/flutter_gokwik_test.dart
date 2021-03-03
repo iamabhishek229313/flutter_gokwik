@@ -18,6 +18,6 @@ void main() {
   });
 
   test('getPlatformVersion', () async {
-    expect(await FlutterGokwik.platformVersion, '42');
+    expect(await Gokwik.platformVersion, '42');
   });
 }
