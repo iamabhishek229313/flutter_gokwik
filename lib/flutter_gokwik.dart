@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,7 +31,24 @@ class Gokwik {
     return version;
   }
 
-  void initPayment(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => GoKwikPayScreen()));
+  void initPayment(BuildContext context, {@required GokwikData data}) {
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => GoKwikPayScreen(
+              data: data,
+            )));
   }
+}
+
+class GokwikData {
+  final String requestId;
+  final String gokwikOid;
+  final String orderStatus;
+  final String total;
+  final String moid;
+  final String mid;
+  final String phone;
+  final String orderType;
+
+  GokwikData(
+      this.requestId, this.gokwikOid, this.orderStatus, this.total, this.moid, this.mid, this.phone, this.orderType);
 }
