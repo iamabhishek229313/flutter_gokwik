@@ -1,14 +1,17 @@
+import 'dart:convert';
 import 'dart:math';
+import 'dart:developer' as dev;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_gokwik/const/app_colors.dart';
-import 'package:flutter_gokwik/flutter_gokwik.dart';
+import 'package:flutter_gokwik/models/verify_model.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:upi_pay/upi_pay.dart';
 
 class UPIPayScreen extends StatefulWidget {
-  final GokwikData data;
+  final VerifyModel verifyModel;
 
-  const UPIPayScreen({Key key, @required this.data}) : super(key: key);
+  const UPIPayScreen({Key key, @required this.verifyModel}) : super(key: key);
 
   @override
   _UPIPayScreenState createState() => _UPIPayScreenState();
@@ -16,10 +19,13 @@ class UPIPayScreen extends StatefulWidget {
 
 class _UPIPayScreenState extends State<UPIPayScreen> {
   Future<List<ApplicationMeta>> _appsFuture;
+  Uint8List _bytesImage;
+
   @override
   void initState() {
     super.initState();
     _appsFuture = UpiPay.getInstalledUpiApplications();
+    _bytesImage = Base64Decoder().convert(widget.verifyModel.data.qrCode.split('base64,')[1]);
   }
 
   @override
@@ -31,16 +37,20 @@ class _UPIPayScreenState extends State<UPIPayScreen> {
     final transactionRef = Random.secure().nextInt(1 << 32).toString();
     print("Starting transaction with id $transactionRef");
 
+    String receiverUpiAddress = widget.verifyModel.data.uLink.split('pa=')[1].split('&')[0];
+
+    dev.log("Receiver UPI Address " + receiverUpiAddress.toString());
+
     final a = await UpiPay.initiateTransaction(
-      amount: widget.data.total,
+      amount: widget.verifyModel.data.total,
       app: app.upiApplication,
-      receiverName: 'XXXXX',
-      receiverUpiAddress: "7004883767@paytm",
+      receiverName: 'Gokwik',
+      receiverUpiAddress: receiverUpiAddress,
       transactionRef: transactionRef,
-      merchantCode: '7372',
+      merchantCode: widget.verifyModel.data.transactionId.toString(),
     );
 
-    print(a);
+    dev.log("Payement output " + a.toString());
   }
 
   @override
@@ -77,66 +87,23 @@ class _UPIPayScreenState extends State<UPIPayScreen> {
                 Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Container(
+                        height: screenHeight * 0.06,
+                        width: double.maxFinite,
+                        padding: EdgeInsets.only(left: 16.0),
                         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10.0)),
-                        child: Theme(
-                          data: ThemeData().copyWith(dividerColor: Colors.transparent),
-                          child: ExpansionTile(
-                              childrenPadding: EdgeInsets.all(8.0).copyWith(bottom: 24.0),
-                              tilePadding: EdgeInsets.only(left: 24.0 + 8.0, right: 24.0),
-                              title: RichText(
-                                text: TextSpan(
-                                  text: 'Pay ',
-                                  style: TextStyle(color: Colors.black, fontSize: 16.0, fontWeight: FontWeight.w300),
-                                  children: <TextSpan>[
-                                    TextSpan(
-                                        text: '₹' + widget.data.total,
-                                        style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                              ),
-                              children: [
-                                Column(
-                                  children: List.generate(
-                                      5,
-                                      (index) => Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 24.0).copyWith(top: 4.0),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Text(
-                                                  "Total Discount",
-                                                  style: TextStyle(fontSize: 14.0, fontWeight: FontWeight.w300),
-                                                ),
-                                                Text(
-                                                  "₹",
-                                                  style: TextStyle(fontSize: 14.0, fontWeight: FontWeight.w500),
-                                                ),
-                                              ],
-                                            ),
-                                          )),
-                                ),
-                                Divider(
-                                  color: Colors.grey,
-                                  indent: 24.0,
-                                  endIndent: 24.0,
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 24.0).copyWith(top: 4.0),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        "Total Discount",
-                                        style: TextStyle(fontSize: 14.0, fontWeight: FontWeight.w600),
-                                      ),
-                                      Text(
-                                        "₹" + widget.data.total,
-                                        style: TextStyle(fontSize: 14.0, fontWeight: FontWeight.w500),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                              ]),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: RichText(
+                            text: TextSpan(
+                              text: 'Pay ',
+                              style: TextStyle(color: Colors.black, fontSize: 16.0, fontWeight: FontWeight.w300),
+                              children: <TextSpan>[
+                                TextSpan(
+                                    text: '₹' + widget.verifyModel.data.total,
+                                    style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
                         ))),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -155,12 +122,30 @@ class _UPIPayScreenState extends State<UPIPayScreen> {
                         builder: (context, snapshot) {
                           if (!snapshot.hasData)
                             return Container(
-                              height: screenHeight * 0.3,
+                              height: screenHeight * 0.4,
                               child: Center(
                                   child: SpinKitRing(
                                 color: Colors.green,
                                 size: 24.0,
                                 lineWidth: 2.0,
+                              )),
+                            );
+                          else if (snapshot.data.length == 0)
+                            return Container(
+                              height: screenHeight * 0.3,
+                              child: Center(
+                                  child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Image.memory(
+                                    _bytesImage,
+                                    fit: BoxFit.contain,
+                                  ),
+                                  Text(
+                                    "Scan this QR Code",
+                                    style: TextStyle(fontSize: 12.0, color: Colors.grey),
+                                  )
+                                ],
                               )),
                             );
 
@@ -171,13 +156,17 @@ class _UPIPayScreenState extends State<UPIPayScreen> {
                               itemCount: snapshot.data.length,
                               itemBuilder: (context, index) {
                                 final it = snapshot.data[index];
+
+                                if (!widget.verifyModel.data.uapp
+                                    .contains(it.upiApplication.getAppName().toLowerCase())) return SizedBox();
+
                                 return Container(
                                   margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
                                   height: screenHeight * 0.08,
                                   child: Material(
                                     elevation: 20.0,
-                                    color: AppColors.background,
-                                    shadowColor: AppColors.shadow.withAlpha(90),
+                                    color: AppColors.greyShade,
+                                    shadowColor: AppColors.shadow,
                                     animationDuration: Duration(milliseconds: 200),
                                     type: MaterialType.canvas,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
@@ -224,7 +213,7 @@ class _UPIPayScreenState extends State<UPIPayScreen> {
                                     style: TextStyle(fontWeight: FontWeight.w400, color: Colors.black),
                                   ),
                                   Text(
-                                    widget.data.phone,
+                                    widget.verifyModel.data.phone,
                                     style: TextStyle(fontWeight: FontWeight.w500, color: Colors.green),
                                   )
                                 ],
@@ -261,22 +250,36 @@ class _UPIPayScreenState extends State<UPIPayScreen> {
               ],
             ),
           ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  "POWERED BY ",
-                  style: TextStyle(fontSize: 8.0, color: Colors.grey),
-                ),
-                Image.network(
-                  "https://s3.ap-south-1.amazonaws.com/cdn.gokwik.co/logo/gokwik-cod-logo.gif",
-                  height: screenHeight * 0.02,
-                  fit: BoxFit.cover,
-                )
-              ],
-            ),
+          BottomLogo(screenHeight: screenHeight)
+        ],
+      ),
+    );
+  }
+}
+
+class BottomLogo extends StatelessWidget {
+  const BottomLogo({
+    Key key,
+    @required this.screenHeight,
+  }) : super(key: key);
+
+  final double screenHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            "POWERED BY ",
+            style: TextStyle(fontSize: 8.0, color: Colors.grey),
+          ),
+          Image.network(
+            "https://s3.ap-south-1.amazonaws.com/cdn.gokwik.co/logo/gokwik-cod-logo.gif",
+            height: screenHeight * 0.02,
+            fit: BoxFit.cover,
           )
         ],
       ),

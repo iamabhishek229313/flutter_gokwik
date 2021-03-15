@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
-
+import 'package:flutter_gokwik/models/payment_capture_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_gokwik/flutter_gokwik.dart';
+import 'package:flutter_gokwik/models/verify_model.dart';
 import 'package:flutter_gokwik/ui/cod_pay_screen.dart';
 import 'package:flutter_gokwik/ui/upi_pay_screen.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -19,11 +21,41 @@ class GoKwikPayScreen extends StatefulWidget {
 }
 
 class _GoKwikPayScreenState extends State<GoKwikPayScreen> {
-  Future<dynamic> _getVerified() async {
-    /// [the dummy initialisation]
+  Timer timer;
+  VerifyModel verifyModel;
+  bool waitingForResponse = false;
 
-    log("get verified");
-    log(widget.data.phone.toString());
+  Future<http.Response> _paymentCapture(VerifyModel verifyModel) async {
+    log("_paymentCapture");
+
+    var response = await http.post('https://devapi.gokwik.co/v1/payment/capture',
+        body: {"gokwik_oid": verifyModel.data.gokwikOid, "auth_token": verifyModel.data.authToken});
+
+    log("Payment/capture : " + response.body.toString());
+
+    PaymentResponse paymentResponse = PaymentResponse.fromJson(json.decode(response.body.toString()));
+
+    log("payment_status " + paymentResponse.data.paymentStatus.toString());
+
+    if (paymentResponse.data.paymentStatus == "SUCCESS") {
+      Navigator.pop(context, paymentResponse);
+      timer.cancel();
+    }
+
+    return response;
+  }
+
+  _initPaymentCapture(VerifyModel verifyModel) {
+    timer = Timer.periodic(Duration(seconds: 5), (timer) async {
+      if (!waitingForResponse) {
+        waitingForResponse = true;
+        await _paymentCapture(verifyModel);
+        waitingForResponse = false;
+      }
+    });
+  }
+
+  Future<dynamic> _getVerified() async {
     var url = 'https://devapi.gokwik.co/v1/order/verify';
 
     /// [Merchant response]
@@ -38,11 +70,10 @@ class _GoKwikPayScreenState extends State<GoKwikPayScreen> {
       "order_type": widget.data.orderType
     });
 
-    print('Response status: ${response.statusCode}');
-    print('Response body: ${response.body}');
+    if (widget.data.orderType == "upi") verifyModel = VerifyModel.fromJson(json.decode(response.body));
 
-    print(response.body.toString());
-    log("Here it is II ");
+    /// [Initializing the payment/capture pooling, which trigger api in every 5 sec]
+    _initPaymentCapture(verifyModel);
 
     return response;
   }
@@ -52,7 +83,7 @@ class _GoKwikPayScreenState extends State<GoKwikPayScreen> {
     return FutureBuilder(
       future: _getVerified(),
       builder: (BuildContext context, AsyncSnapshot snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData && mounted)
           return Scaffold(
             backgroundColor: Colors.grey.shade300,
             body: AlertDialog(
@@ -84,12 +115,14 @@ class _GoKwikPayScreenState extends State<GoKwikPayScreen> {
             ),
           );
 
-        if (widget.data.orderType == "upi")
+        if (widget.data.orderType == "upi" && mounted)
           return UPIPayScreen(
-            data: widget.data,
+            verifyModel: verifyModel,
           );
-        else
-          return CODPayScreen();
+        else if (mounted)
+          return CODPayScreen(
+            verifyModel: verifyModel,
+          );
       },
     );
   }

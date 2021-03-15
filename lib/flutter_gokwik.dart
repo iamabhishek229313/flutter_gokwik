@@ -1,29 +1,20 @@
 import 'dart:async';
 import 'dart:developer';
 
+import 'package:eventify/eventify.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_gokwik/models/payment_capture_model.dart';
 import 'package:flutter_gokwik/ui/pay_screen.dart';
+import 'package:http/http.dart' as http;
 
 class Gokwik {
-  // Response codes from platform
-  static const _CODE_PAYMENT_SUCCESS = 0;
-  static const _CODE_PAYMENT_ERROR = 1;
-  static const _CODE_PAYMENT_EXTERNAL_WALLET = 2;
-
   // Event names
   static const EVENT_PAYMENT_SUCCESS = 'payment.success';
   static const EVENT_PAYMENT_ERROR = 'payment.error';
-  static const EVENT_EXTERNAL_WALLET = 'payment.external_wallet';
+  static const NETWORK_ERROR = 'payment.newtwork.issue';
 
-  // Payment error codes
-  static const NETWORK_ERROR = 0;
-  static const INVALID_OPTIONS = 1;
-  static const PAYMENT_CANCELLED = 2;
-  static const TLS_ERROR = 3;
-  static const INCOMPATIBLE_PLUGIN = 4;
-  static const UNKNOWN_ERROR = 100;
-
+  // Method Channels
   static const MethodChannel _channel = const MethodChannel('flutter_gokwik');
 
   static Future<String> get platformVersion async {
@@ -31,11 +22,38 @@ class Gokwik {
     return version;
   }
 
-  void initPayment(BuildContext context, {@required GokwikData data}) {
-    Navigator.of(context).push(MaterialPageRoute(
+  EventEmitter _eventEmitter;
+
+  Gokwik() {
+    _eventEmitter = EventEmitter();
+  }
+
+  // Constructor.
+  void initPayment(BuildContext context, {@required GokwikData data}) async {
+    final PaymentResponse paymentResponse = await Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => GoKwikPayScreen(
               data: data,
             )));
+
+    if (paymentResponse == null) return;
+
+    log("GOKWIK: Payment Reponse : " + paymentResponse.toString());
+
+    if (paymentResponse.data.paymentStatus == Gokwik.EVENT_PAYMENT_SUCCESS) {
+      _eventEmitter.emit(Gokwik.EVENT_PAYMENT_SUCCESS);
+    } else if (paymentResponse.data.paymentStatus == Gokwik.EVENT_PAYMENT_ERROR) {
+      _eventEmitter.emit(Gokwik.EVENT_PAYMENT_SUCCESS);
+    } else if (paymentResponse.data.paymentStatus == Gokwik.NETWORK_ERROR) {
+      _eventEmitter.emit(Gokwik.NETWORK_ERROR);
+    }
+  }
+
+  /// Registers event listeners for payment events
+  void on(String event, Function handler) {
+    EventCallback cb = (event, cont) {
+      handler(event.eventData);
+    };
+    _eventEmitter.on(event, null, cb);
   }
 }
 
